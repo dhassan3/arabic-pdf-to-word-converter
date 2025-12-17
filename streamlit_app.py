@@ -1,19 +1,19 @@
 import streamlit as st
 from pdf2docx import Converter
-import os
 import tempfile
 import zipfile
 from pathlib import Path
 import arabic_reshaper
 from bidi.algorithm import get_display
+from docx import Document
 from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.shared import Pt
 
 st.set_page_config(page_title="Arabic PDF → Word", page_icon="📄")
-st.title("Arabic PDF to Word Converter")
+st.title("🇸🇦 Arabic PDF to Word Converter")
 st.markdown("""
-Upload your Arabic PDFs and get perfectly formatted Word files.  
-Supports RTL text, connected letters, tables, and images.
+Upload your Arabic PDFs and get perfectly formatted, editable Word files.  
+Supports right-to-left text, connected letters, tables, and images.
 """)
 
 # Sidebar options
@@ -40,6 +40,15 @@ if not uploaded_files:
     st.info("👆 Upload one or more Arabic PDFs to get started.")
     st.stop()
 
+# Preferred Arabic fonts (best to worst fallback)
+preferred_arabic_fonts = [
+    'Arabic Typesetting',
+    'Traditional Arabic',
+    'Simplified Arabic',
+    'Sakkal Majalla',
+    'Arial'
+]
+
 with tempfile.TemporaryDirectory() as temp_dir:
     temp_path = Path(temp_dir)
     output_files = []
@@ -57,22 +66,20 @@ with tempfile.TemporaryDirectory() as temp_dir:
         status_text.text(f"Processing {idx+1}/{len(uploaded_files)}: {uploaded_file.name}")
 
         try:
+            # Convert using pdf2docx
             cv = Converter(str(input_pdf))
-
             if convert_all:
                 cv.convert(str(output_docx))
             else:
                 cv.convert(str(output_docx), start=start_page-1, end=end_page)
-
             cv.close()
 
-            # Post-process the DOCX for perfect Arabic
-            from docx import Document
+            # Post-process for perfect Arabic
             doc = Document(str(output_docx))
 
             for para in doc.paragraphs:
                 if para.text.strip():
-                    # Fix Arabic text shaping and direction
+                    # Fix shaping and bidirectional text
                     reshaped_text = arabic_reshaper.reshape(para.text)
                     bidi_text = get_display(reshaped_text)
 
@@ -80,27 +87,14 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     para.paragraph_format.right_to_left = True
                     para.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
 
-                    preferred_arabic_fonts = ['Arabic Typesetting', 'Traditional Arabic', 'Simplified Arabic', 'Sakkal Majalla', 'Arial']
+                    # Apply best available Arabic font
+                    for run in para.runs:
+                        run.font.size = Pt(12)
+                        for font_name in preferred_arabic_fonts:
+                            run.font.name = font_name
+                            break  # Use the first (best) available
 
-for para in doc.paragraphs:
-    if para.text.strip():
-        reshaped_text = arabic_reshaper.reshape(para.text)
-        bidi_text = get_display(reshaped_text)
-
-        para.text = bidi_text
-        para.paragraph_format.right_to_left = True
-        para.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
-
-        for run in para.runs:
-            run.font.size = Pt(12)
-            # Fallback chain
-            for font_name in preferred_arabic_fonts:
-                run.font.name = font_name
-                break
-
-            # Save improved version
             doc.save(str(output_docx))
-
             output_files.append((output_docx, f"{filename_base}.docx"))
 
         except Exception as e:
@@ -112,7 +106,7 @@ for para in doc.paragraphs:
     status_text.text("All done!")
     progress_bar.empty()
 
-    # Download
+    # Download section
     if len(output_files) == 1:
         with open(output_files[0][0], "rb") as f:
             st.download_button(
@@ -134,9 +128,14 @@ for para in doc.paragraphs:
                 mime="application/zip"
             )
 
-    st.success("Conversion complete! Arabic text is now properly formatted.")
-    # Balloons removed as requested
+    st.success("Conversion complete! Arabic text is properly formatted with professional fonts.")
+
+    # Tip for users
+    st.info(
+        "💡 Tip: For the best Arabic display in Microsoft Word, "
+        "select the text and try fonts like 'Arabic Typesetting' or 'Traditional Arabic' "
+        "if the default doesn't look perfect."
+    )
 
 st.markdown("---")
 st.caption("Made with ❤️ for perfect Arabic document conversion")
-
