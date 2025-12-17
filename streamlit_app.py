@@ -10,7 +10,7 @@ from docx.enum.text import WD_PARAGRAPH_ALIGNMENT
 from docx.shared import Pt
 
 st.set_page_config(page_title="Arabic PDF → Word", page_icon="📄")
-st.title("🇸🇦 Arabic PDF to Word Converter")
+st.title("Arabic PDF to Word Converter")
 st.markdown("""
 Upload your Arabic PDFs and get perfectly formatted Word files.  
 Supports RTL text, connected letters, tables, and images.
@@ -83,7 +83,6 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     for run in para.runs:
                         run.font.name = 'Arial'
                         run.font.size = Pt(12)
-                        run.font.bold = False  # Optional: adjust as needed
 
             # Save improved version
             doc.save(str(output_docx))
@@ -122,7 +121,7 @@ with tempfile.TemporaryDirectory() as temp_dir:
             )
 
     st.success("Conversion complete! Arabic text is now properly formatted.")
-    st.balloons()
+    # Balloons removed as requested
 
 st.markdown("---")
 st.caption("Made with ❤️ for perfect Arabic document conversion")
