@@ -80,9 +80,23 @@ with tempfile.TemporaryDirectory() as temp_dir:
                     para.paragraph_format.right_to_left = True
                     para.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
 
-                    for run in para.runs:
-                        run.font.name = 'Arial'
-                        run.font.size = Pt(12)
+                    preferred_arabic_fonts = ['Arabic Typesetting', 'Traditional Arabic', 'Simplified Arabic', 'Sakkal Majalla', 'Arial']
+
+for para in doc.paragraphs:
+    if para.text.strip():
+        reshaped_text = arabic_reshaper.reshape(para.text)
+        bidi_text = get_display(reshaped_text)
+
+        para.text = bidi_text
+        para.paragraph_format.right_to_left = True
+        para.paragraph_format.alignment = WD_PARAGRAPH_ALIGNMENT.RIGHT
+
+        for run in para.runs:
+            run.font.size = Pt(12)
+            # Fallback chain
+            for font_name in preferred_arabic_fonts:
+                run.font.name = font_name
+                break
 
             # Save improved version
             doc.save(str(output_docx))
@@ -125,3 +139,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
 st.markdown("---")
 st.caption("Made with ❤️ for perfect Arabic document conversion")
+
