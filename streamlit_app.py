@@ -1,5 +1,6 @@
 import streamlit as st
-import fitz  # PyMuPDF
+from pdf2image import convert_from_bytes
+from PyPDF2 import PdfReader
 from docx import Document
 from docx.shared import Inches
 from pathlib import Path
@@ -7,143 +8,114 @@ import tempfile
 import zipfile
 from io import BytesIO
 
-st.set_page_config(page_title="Arabic PDF → Word Converter", page_icon="📄")
+st.set_page_config(page_title="Arabic PDF → Word", page_icon="📄")
 st.title("🇸🇦 Arabic PDF to Word Converter")
-st.markdown("Upload Arabic PDFs → get editable Word files. Layout & RTL preserved as best as possible.")
+st.markdown("Convert Arabic PDFs to editable Word files. Great for text and scanned documents.")
 
-# Sidebar options
+# Sidebar
 st.sidebar.header("Options")
-convert_all_pages = st.sidebar.checkbox("Convert all pages", value=True)
-if not convert_all_pages:
+all_pages = st.sidebar.checkbox("Convert all pages", value=True)
+if not all_pages:
     col1, col2 = st.sidebar.columns(2)
-    start_page = col1.number_input("Start page", min_value=1, value=1, step=1)
-    end_page = col2.number_input("End page", min_value=1, value=10, step=1)
-    if start_page > end_page:
-        st.sidebar.error("Start page must be ≤ End page")
+    start = col1.number_input("Start page", min_value=1, value=1, step=1)
+    end = col2.number_input("End page", min_value=1, value=10, step=1)
+    if start > end:
+        st.sidebar.error("Start must be ≤ End")
         st.stop()
 
-image_fallback = st.sidebar.checkbox(
-    "Exact layout mode (embed pages as images)",
+image_mode = st.sidebar.checkbox(
+    "Exact layout (embed as images)",
     value=False,
-    help="Recommended for scanned PDFs – perfect visual match (text not editable)"
+    help="Best for scanned PDFs – perfect visual match (text not searchable)"
 )
 
-# File uploader
-uploaded_files = st.file_uploader("Choose PDF file(s)", type="pdf", accept_multiple_files=True)
-
-if not uploaded_files:
-    st.info("👆 Upload one or more PDFs to start.")
+# Upload
+files = st.file_uploader("Upload PDF(s)", type="pdf", accept_multiple_files=True)
+if not files:
+    st.info("Upload PDFs to start.")
     st.stop()
 
-# Processing
-with tempfile.TemporaryDirectory() as temp_dir:
-    temp_path = Path(temp_dir)
-    output_files = []
-    overall_progress = st.progress(0)
-    status_text = st.empty()
+with tempfile.TemporaryDirectory() as tmp:
+    tmp_path = Path(tmp)
+    results = []
+    progress = st.progress(0)
+    status = st.empty()
 
-    for idx, uploaded_file in enumerate(uploaded_files):
-        filename_base = Path(uploaded_file.name).stem
-        input_pdf_path = temp_path / uploaded_file.name
-        with open(input_pdf_path, "wb") as f:
-            f.write(uploaded_file.getbuffer())
+    for i, file in enumerate(files):
+        base = Path(file.name).stem
+        pdf_bytes = file.getvalue()
 
-        # Simple preview (first file or single)
-        if idx == 0 or len(uploaded_files) == 1:
-            with st.expander("👁️ View uploaded PDF (download to open)"):
-                st.download_button(
-                    "Download PDF for local viewing",
-                    uploaded_file.getvalue(),
-                    file_name=uploaded_file.name,
-                    mime="application/pdf"
-                )
+        # Preview
+        if i == 0 or len(files) == 1:
+            with st.expander("👁️ View uploaded PDF"):
+                st.download_button("Open locally", pdf_bytes, file.name, "application/pdf")
 
         # Scanned detection
-        doc = fitz.open(stream=uploaded_file.getvalue(), filetype="pdf")
-        text_chars = sum(len(page.get_text()) for page in doc)
-        if text_chars < 100:
-            st.warning(f"⚠️ **{uploaded_file.name}** appears scanned/image-based. Enable 'Exact layout mode' for best results.")
+        reader = PdfReader(BytesIO(pdf_bytes))
+        text_len = sum(len(page.extract_text() or "") for page in reader.pages)
+        if text_len < 100:
+            st.warning(f"⚠️ {file.name} seems scanned. Use 'Exact layout' mode for best results.")
 
-        output_docx_path = temp_path / f"{filename_base}.docx"
-        status_text.text(f"Processing {idx+1}/{len(uploaded_files)}: {uploaded_file.name}")
+        docx_path = tmp_path / f"{base}.docx"
+        status.text(f"Processing {i+1}/{len(files)}: {file.name}")
 
         try:
-            word_doc = Document()
-            word_doc.add_heading(f"Converted from: {uploaded_file.name}", level=1)
+            word = Document()
+            word.add_heading(f"From: {file.name}", 1)
 
-            total_pages = doc.page_count
-            page_progress = st.empty()
+            total = len(reader.pages)
+            page_bar = st.empty()
 
-            for page_num in range(total_pages):
-                if not convert_all_pages and not (start_page <= page_num + 1 <= end_page):
-                    continue
+            page_range = range(total) if all_pages else range(start-1, end)
 
-                page_progress.progress((page_num + 1) / total_pages)
-                page_progress.text(f"Page {page_num + 1} of {total_pages}")
+            for n in page_range:
+                page_bar.progress((n - (start-1 if not all_pages else 0) + 1) / len(page_range))
+                page_bar.text(f"Page {n+1}/{total}")
 
-                page = doc.load_page(page_num)
-
-                if image_fallback:
-                    # Embed as high-quality image
-                    mat = fitz.Matrix(300/72, 300/72)  # 300 DPI
-                    pix = page.get_pixmap(matrix=mat, alpha=False)
-                    img_bytes = pix.tobytes("png")
-                    word_doc.add_paragraph().add_run().add_picture(BytesIO(img_bytes), width=Inches(6.5))
-                    word_doc.add_page_break()
+                if image_mode:
+                    # High-quality image
+                    images = convert_from_bytes(pdf_bytes, dpi=300, first_page=n+1, last_page=n+1)
+                    img_bytes = BytesIO()
+                    images[0].save(img_bytes, format="PNG")
+                    img_bytes.seek(0)
+                    word.add_paragraph().add_run().add_picture(img_bytes, width=Inches(6.5))
+                    word.add_page_break()
                 else:
-                    # Basic text extraction with RTL hint
-                    blocks = page.get_text("dict")["blocks"]
-                    for block in blocks:
-                        if "lines" in block:
-                            para_text = ""
-                            for line in block["lines"]:
-                                for span in line["spans"]:
-                                    para_text += span["text"]
-                            para_text = para_text.strip()
-                            if para_text:
-                                p = word_doc.add_paragraph(para_text)
-                                if any("\u0600" <= c <= "\u06FF" for c in para_text):  # Arabic chars
-                                    p.paragraph_format.right_to_left = True
+                    # Text extraction
+                    page_text = reader.pages[n].extract_text() or ""
+                    if page_text.strip():
+                        p = word.add_paragraph(page_text)
+                        if any("\u0600" <= c <= "\u06FF" for c in page_text):
+                            p.paragraph_format.right_to_left = True
 
-            word_doc.save(str(output_docx_path))
-            page_progress.empty()
-            output_files.append((output_docx_path, f"{filename_base}.docx"))
+            word.save(str(docx_path))
+            page_bar.empty()
+            results.append((docx_path, f"{base}.docx"))
 
         except Exception as e:
-            st.error(f"Failed on {uploaded_file.name}: {str(e)}")
-            continue
+            st.error(f"Error with {file.name}: {e}")
 
-        overall_progress.progress((idx + 1) / len(uploaded_files))
+        progress.progress((i+1)/len(files))
 
-    status_text.text("All complete!")
-    overall_progress.empty()
+    status.text("Complete!")
+    progress.empty()
 
-    # Download section
-    if len(output_files) == 1:
-        with open(output_files[0][0], "rb") as f:
-            st.download_button(
-                "📥 Download Word file",
-                f,
-                file_name=output_files[0][1],
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
-            )
+    # Download
+    if len(results) == 1:
+        with open(results[0][0], "rb") as f:
+            st.download_button("📥 Download Word file", f, file_name=results[0][1],
+                               mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document")
     else:
-        zip_path = temp_path / "converted_files.zip"
+        zip_path = tmp_path / "converted.zip"
         with zipfile.ZipFile(zip_path, "w") as z:
-            for path, name in output_files:
-                z.write(path, name)
+            for p, n in results:
+                z.write(p, n)
         with open(zip_path, "rb") as f:
-            st.download_button(
-                "📦 Download all Word files (ZIP)",
-                f,
-                file_name="converted_arabic_files.zip",
-                mime="application/zip"
-            )
+            st.download_button("📦 Download all as ZIP", f, "arabic_converted.zip", "application/zip")
 
-    st.success("Success! Files ready.")
+    st.success("Success!")
     st.balloons()
 
-    # Feedback
     st.caption("Was this helpful?")
     st.feedback("thumbs")
 
