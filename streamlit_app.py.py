@@ -11,7 +11,7 @@ from io import BytesIO
 
 # Page config
 st.set_page_config(page_title="Arabic PDF → Word Converter", page_icon="📄")
-st.title("🇸🇦 Arabic PDF to Word Converter")
+st.title("Arabic PDF to Word Converter")
 st.markdown("""
 Upload Arabic PDFs → get editable Word files.  
 Supports layout preservation, tables, images, and RTL text.
@@ -178,3 +178,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
         st.toast("👍 Thank you! Glad it worked well.")
 
 st.markdown("Made with ❤️ for Arabic document lovers")
+
