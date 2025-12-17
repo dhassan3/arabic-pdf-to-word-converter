@@ -7,7 +7,7 @@ from pathlib import Path
 
 # Page config & styling
 st.set_page_config(page_title="Arabic PDF → Word Converter", page_icon="📄")
-st.title("🇸🇦 Arabic PDF to Word Converter")
+st.title("Arabic PDF to Word Converter")
 st.markdown("""
 Upload one or more Arabic PDFs and convert them to editable Word (.docx) files.  
 Layout, tables, images, and right-to-left text are preserved as much as possible.
@@ -132,3 +132,4 @@ with tempfile.TemporaryDirectory() as temp_dir:
 
     st.success("Done! Your files are ready.")
     st.balloons()
+
