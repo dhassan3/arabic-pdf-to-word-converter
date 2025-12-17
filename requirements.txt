@@ -1,1 +1,2 @@
-streamlit run pdf_to_word_app.py
+streamlit
+pdf2docx
